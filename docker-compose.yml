@@ -18,7 +18,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # 采集归档服务：FastAPI + SQLite，对接岸站 SSE 与历史接口
+  # 采集归档服务：FastAPI + SQLite，对接岸站 SSE 与历史接口，增量计算港区进出事件
   collector:
     build: .
     command: uvicorn collector.app:app --host 0.0.0.0 --port 8001
@@ -29,6 +29,15 @@ services:
       DB_PATH: "/data/collector.db"
       HISTORY_PAGE_SIZE: "50"
       SSE_READ_TIMEOUT: "60"
+      # 港区固定经纬度矩形（部署配置）：边界算内部，不跨 180° 经线。
+      # 覆盖模拟船圆周运动的内圈轨道，保证持续产生进/出港事件。
+      PORT_LAT_MIN: "31.208"
+      PORT_LAT_MAX: "31.252"
+      PORT_LON_MIN: "121.448"
+      PORT_LON_MAX: "121.492"
+      # 事件引擎单批处理船位数（小批量提交，历史扫描不占长写事务）
+      EVENT_BATCH_SIZE: "200"
+      EVENT_IDLE_INTERVAL: "0.3"
     volumes:
       - collector-data:/data
     depends_on:
