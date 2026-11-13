@@ -1,0 +1,39 @@
+services:
+  # 本地模拟岸站：持续生成船位，SSE 实时流 + 历史分页（可注入断流/翻页失败）
+  station:
+    build: .
+    command: uvicorn shore_station.app:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      # 每 0.25 秒生成一条船位，启动即有 60 条历史
+      GEN_INTERVAL: "0.25"
+      INITIAL_COUNT: "60"
+      HISTORY_PAGE_LIMIT: "100"
+      # 初始历史接口正常；演练时通过 POST /station/history-fail-rate 调整
+      HISTORY_FAIL_RATE: "0"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 采集归档服务：FastAPI + SQLite，对接岸站 SSE 与历史接口
+  collector:
+    build: .
+    command: uvicorn collector.app:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    environment:
+      STATION_URL: "http://station:8000"
+      DB_PATH: "/data/collector.db"
+      HISTORY_PAGE_SIZE: "50"
+      SSE_READ_TIMEOUT: "60"
+    volumes:
+      - collector-data:/data
+    depends_on:
+      station:
+        condition: service_healthy
+
+volumes:
+  collector-data:
